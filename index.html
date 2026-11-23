@@ -560,10 +560,23 @@
       return bien.id_bien && bien.statut.trim().toLowerCase() === "dispo";
     }
 
+    /** Ouvre WhatsApp sur la ligne de l'agence, message prérempli.
+     *  Android : de préférence l'application WhatsApp des particuliers (com.whatsapp), où le client a commencé la
+     *  conversation, et non WhatsApp Business quand les deux sont installées ; sans elle, lien universel wa.me.
+     *  Navigateurs intégrés (Facebook, Instagram) et autres systèmes : lien universel, qu'ils gèrent bien. */
+    function versWhatsApp(message) {
+      const texte = encodeURIComponent(message);
+      const web = `https://wa.me/${CONFIG.whatsappNumber}?text=${texte}`;
+      const ua = navigator.userAgent || "";
+      if (!/Android/i.test(ua) || /FBAN|FBAV|FB_IAB|Instagram/i.test(ua)) return web;
+      return `intent://send?phone=${CONFIG.whatsappNumber}&text=${texte}`
+        + `#Intent;scheme=whatsapp;package=com.whatsapp;S.browser_fallback_url=${encodeURIComponent(web)};end`;
+    }
+
     /** Lien WhatsApp au format attendu par l'automatisation n8n + Geskap. Ne pas modifier le gabarit. */
     function lienWhatsApp(bien) {
       const message = `Bonjour, je suis intéressé par le bien [${bien.id_bien}] : ${bien.type_bien} à ${bien.quartier} (${bien.prixFormate}). Je souhaite organiser une visite.`;
-      return `https://wa.me/${CONFIG.whatsappNumber}?text=${encodeURIComponent(message)}`;
+      return versWhatsApp(message);
     }
 
     /** Adresse partageable d'une fiche (?bien=PIL-001), sans le reste de la requête. */
@@ -1014,11 +1027,18 @@
       $("#accroche-titre").textContent = CONFIG.heroTitle;
       $("#accroche-texte").textContent = CONFIG.heroText;
       $("#pied-agence").textContent = `${CONFIG.agencyName} · Libreville, Gabon`;
-      $("#sonnette").href = `https://wa.me/${CONFIG.whatsappNumber}?text=${encodeURIComponent(CONFIG.contactMessage)}`;
+      $("#sonnette").href = versWhatsApp(CONFIG.contactMessage);
       document.title = `${CONFIG.agencyName} · Biens disponibles`;
     }
 
     function lierEvenements() {
+      // Liens intent:// (Android) : ouverts dans l'onglet courant, sinon Chrome laisse un onglet vide derrière WhatsApp.
+      document.addEventListener("click", e => {
+        const wa = e.target.closest('a[href^="intent:"]');
+        if (!wa || e.defaultPrevented) return;
+        e.preventDefault();
+        window.location.href = wa.href;
+      });
       document.addEventListener("click", e => {
         const t = e.target.closest("[data-transaction],[data-quartier],[data-tri],[data-action],[data-ouvrir],[data-photo]");
         if (!t) return;
